@@ -1,0 +1,17 @@
+{
+    "manifest_version": 3,
+    "name": "Qur'an verse text hover",
+    "description": "Show popup when hovering over text containing Qur'an verse number",
+    "version": "1.0",
+    "permissions": [
+        "activeTab",
+        "scripting"
+    ],
+    "content_scripts": [
+        {
+        "matches": ["<all_urls>"],
+        "css": ["styles.css"],
+        "js": ["content.js"]
+        }
+    ]
+}
