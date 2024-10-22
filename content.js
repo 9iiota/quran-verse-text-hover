@@ -1,5 +1,4 @@
-const verseRegex = /([1-9]{1,3}):([1-9]{1,3})/g;
-const versesRegex = /(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?/g;
+const quranReferenceRegex = /(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?/g;
 const footNoteRegex = /<(?!br|\ba href\b|\/)[^>]*>((?!>).)*<[^>]*>/g;
 
 const popup = document.createElement('div');
@@ -7,9 +6,7 @@ popup.className = 'quran-popup';
 document.body.appendChild(popup);
 
 let isRightCtrlPressed = false;
-let key = null;
-let mouseX = 0;
-let mouseY = 0;
+let quranReference = '';
 let popupText = null;
 
 document.addEventListener('keydown', (event) =>
@@ -29,9 +26,6 @@ document.addEventListener('keyup', (event) =>
 
 document.addEventListener('mousemove', (event) =>
 {
-    mouseX = event.pageX;
-    mouseY = event.pageY;
-
     if (isRightCtrlPressed)
     {
         const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
@@ -39,43 +33,51 @@ document.addEventListener('mousemove', (event) =>
         {
             const { textContent } = hoveredElement;
 
-            let matches = versesRegex.exec(textContent);
+            // Check if the text contains a Qur'an reference
+            let matches = quranReferenceRegex.exec(textContent);
             if (matches && matches.length > 0)
             {
-                let _key;
                 const chapter = matches[1]
                 const verseStart = matches[2]
                 const verseEnd = matches[3]
 
-                if (!verseEnd)
+                let _quranReference = verseEnd ? `${chapter}:${verseStart}-${verseEnd}` : `${chapter}:${verseStart}`;
+                if (_quranReference !== quranReference)
                 {
-                    _key = `${chapter}:${verseStart}`;
+                    quranReference = _quranReference;
+
+                    (async () =>
+                    {
+                        if (verseEnd)
+                        {
+                            popupText = await fetchVerses(quranReference);
+                        }
+                        else
+                        {
+                            popupText = await fetchVerse(quranReference);
+                        }
+
+                        showPopup(popupText, event.clientX, event.clientY);
+                    })();
                 }
                 else
                 {
-                    _key = `${chapter}:${verseStart}-${verseEnd}`;
+                    showPopup(popupText, event.clientX, event.clientY);
                 }
 
-                if (_key !== key)
-                {
-                    key = _key;
-                    if (!verseEnd)
-                    {
-                        fetchVerse(key);
-                    }
-                    else
-                    {
-                        fetchVerses(key);
-                    }
-                }
-
-                showPopup(popupText, event.pageX, event.pageY);
             }
         }
         else
         {
             togglePopupVisibility();
         }
+    }
+});
+document.addEventListener('mousedown', (event) =>
+{
+    if (event.button === 0)
+    {
+        hidePopupOnClick(event);
     }
 });
 
@@ -88,76 +90,49 @@ popup.addEventListener('mouseleave', () =>
     togglePopupVisibility();
 });
 
-// function checkRightCtrlPressed(e)
-// {
-//     const { code } = e;
-//     if (code === 'ControlRight')
-//     {
-//         const hoveredElements = document.elementsFromPoint(mouseX, mouseY);
-
-//         // Only proceed if hovering over text elements (ignore non-text elements)
-//         if (hoveredElements) //&& hoveredElement.nodeType === Node.TEXT_NODE)
-//         {
-//             const canvasElement = elements.find(element => element instanceof HTMLCanvasElement);
-//             console.log(canvasElement);
-//             return;
-//             const { textContent } = hoveredElements;
-
-//             // Check if the text contains a colon
-//             if (textContent.includes(':'))
-//             {
-//                 // Display the popup
-//                 popup.textContent = "You hovered over text with a colon!";
-//                 popup.style.left = `${element.pageX + 10}px`;
-//                 popup.style.top = `${element.pageY + 10}px`;
-//                 popup.style.display = 'block';
-//             } else
-//             {
-//                 popup.style.display = 'none';
-//             }
-//         } else
-//         {
-//             popup.style.display = 'none';
-//         }
-//     }
-// }
-
-function fetchVerse(verseKey)
+async function fetchVerse(verseKey)
 {
-    fetch(`https://api.quran.com/api/v4/quran/translations/20?verse_key=${verseKey}`)
-        .then((response) => response.json())
-        .then((data) =>
-        {
-            const translation = data.translations[0].text;
-            const text = translation.replace(footNoteRegex, '');
-            popupText = text;
-        })
-        .catch((error) => console.error('Error:', error));
+    try
+    {
+        const response = await fetch(`https://api.quran.com/api/v4/quran/translations/20?verse_key=${verseKey}`);
+        const data = await response.json();
+        const translation = data.translations[0].text;
+
+        const chapter = parseInt(verseKey.split(':')[0]);
+        const verse = parseInt(verseKey.split(':')[1]);
+        return `<a href='https://quran.com/${chapter}?startingVerse=${verse}'>${verse})</a> ${translation.replace(footNoteRegex, '')}`;
+    }
+    catch (error)
+    {
+        console.error('Error:', error);
+        return null;
+    }
 }
 
-function fetchVerses(test)
+async function fetchVerses(quranReference)
 {
-    const chapter = parseInt(test.split(':')[0]);
-    const verseStart = parseInt(test.split('-')[0].split(':')[1]);
-    const verseEnd = parseInt(test.split('-')[1]);
+    const chapter = parseInt(quranReference.split(':')[0]);
+    const verseStart = parseInt(quranReference.split('-')[0].split(':')[1]);
+    const verseEnd = parseInt(quranReference.split('-')[1]);
+    const versesCount = verseEnd - verseStart + 1;
 
-    fetch(`https://api.quran.com/api/v4/quran/translations/20?chapter_number=${chapter}`)
-        .then((response) => response.json())
-        .then((data) =>
-        {
-            const { translations } = data;
-            const versesCount = verseEnd - verseStart + 1;
+    try
+    {
+        const response = await fetch(`https://api.quran.com/api/v4/quran/translations/20?chapter_number=${chapter}`);
+        const data = await response.json();
+        const { translations } = data;
 
-            const output = translations
-                .slice(verseStart - 1, verseStart - 1 + versesCount)
-                .map((translation, index) => `<a href='https://quran.com/${chapter}?startingVerse=${verseStart + index}'>${verseStart + index}) ${translation.text}</a>`)
-                .join('<br>')
-                .replace(footNoteRegex, '');
-
-            console.log(output);
-            popupText = output;
-        })
-        .catch((error) => console.error('Error:', error));
+        return translations
+            .slice(verseStart - 1, verseStart - 1 + versesCount)
+            .map((translation, index) => `<a href='https://quran.com/${chapter}?startingVerse=${verseStart + index}'>${verseStart + index})</a> ${translation.text}`)
+            .join('<br>')
+            .replace(footNoteRegex, '');
+    }
+    catch (error)
+    {
+        console.error('Error:', error);
+        return null;
+    }
 }
 
 function showPopup(text, x, y)
@@ -177,6 +152,14 @@ function togglePopupVisibility()
     else
     {
         popup.style.display = 'block';
+    }
+}
+
+function hidePopupOnClick(event)
+{
+    if (popup.style.display === 'block' && !popup.contains(event.target))
+    {
+        popup.style.display = 'none';
     }
 }
 
@@ -239,6 +222,40 @@ function togglePopupVisibility()
 //                 popup.textContent = "You hovered over text with a colon!";
 //                 popup.style.left = `${event.pageX + 10}px`;
 //                 popup.style.top = `${event.pageY + 10}px`;
+//                 popup.style.display = 'block';
+//             } else
+//             {
+//                 popup.style.display = 'none';
+//             }
+//         } else
+//         {
+//             popup.style.display = 'none';
+//         }
+//     }
+// }
+
+// function checkRightCtrlPressed(e)
+// {
+//     const { code } = e;
+//     if (code === 'ControlRight')
+//     {
+//         const hoveredElements = document.elementsFromPoint(mouseX, mouseY);
+
+//         // Only proceed if hovering over text elements (ignore non-text elements)
+//         if (hoveredElements) //&& hoveredElement.nodeType === Node.TEXT_NODE)
+//         {
+//             const canvasElement = elements.find(element => element instanceof HTMLCanvasElement);
+//             console.log(canvasElement);
+//             return;
+//             const { textContent } = hoveredElements;
+
+//             // Check if the text contains a colon
+//             if (textContent.includes(':'))
+//             {
+//                 // Display the popup
+//                 popup.textContent = "You hovered over text with a colon!";
+//                 popup.style.left = `${element.pageX + 10}px`;
+//                 popup.style.top = `${element.pageY + 10}px`;
 //                 popup.style.display = 'block';
 //             } else
 //             {
