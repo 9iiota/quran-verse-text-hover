@@ -1,0 +1,11 @@
+.quran-popup
+{
+    background-color: #6926D7;
+    color: white;
+    display: none;
+    font-weight: 500;
+    line-height: 1.8;
+    padding: 10px;
+    position: absolute;
+    z-index: 1000;
+}

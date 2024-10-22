@@ -1,17 +1,15 @@
-const verseRegex = /([1-9]{1,3}):([1-9]{1,3})/;
+const verseRegex = /([1-9]{1,3}):([1-9]{1,3})/g;
 const versesRegex = /(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?/g;
+const footNoteRegex = /<(?!br|\ba href\b|\/)[^>]*>((?!>).)*<[^>]*>/g;
 
 const popup = document.createElement('div');
-popup.style.position = 'absolute';
-popup.style.backgroundColor = '#6926D7';
-// popup.style.border = '1px solid black';
-// popup.style.padding = '5px';
-// popup.style.zIndex = 1000;
-popup.style.display = 'none';
+popup.className = 'quran-popup';
 document.body.appendChild(popup);
 
 let isRightCtrlPressed = false;
 let key = null;
+let mouseX = 0;
+let mouseY = 0;
 let popupText = null;
 
 document.addEventListener('keydown', (event) =>
@@ -19,7 +17,6 @@ document.addEventListener('keydown', (event) =>
     if (event.code === 'ControlRight')
     {
         isRightCtrlPressed = true;
-        console.log('Ctrl pressed');
     }
 });
 document.addEventListener('keyup', (event) =>
@@ -27,12 +24,8 @@ document.addEventListener('keyup', (event) =>
     if (event.code === 'ControlRight')
     {
         isRightCtrlPressed = false;
-        console.log('Ctrl released');
     }
 });
-
-let mouseX = 0;
-let mouseY = 0;
 
 document.addEventListener('mousemove', (event) =>
 {
@@ -76,48 +69,23 @@ document.addEventListener('mousemove', (event) =>
                     }
                 }
 
-                popup.innerHTML = popupText;
-                popup.style.left = `${mouseX}px`;
-                popup.style.top = `${mouseY}px`;
-                popup.style.display = 'block';
-                popup.style.color = 'black';
+                showPopup(popupText, event.pageX, event.pageY);
             }
-            // let match;
-            // while ((match = versesRegex.exec(textContent)) !== null)
-            // {
-            //     console.log("Full Match:", match[0]);  // The entire matched string
-            //     console.log("Part 1:", match[1]);        // The first capturing group
-            //     console.log("Part 2:", match[2]);        // The second capturing group
-            //     console.log("Part 3:", match[3]);
-            // }
-
-            // if (matches && matches.length > 0)
-            // {
-            //     if (verseKey !== matches[0])
-            //     {
-            //         verseKey = matches[0];
-            //         fetchVerse(verseKey);
-            //     }
-
-            //     // Display the popup
-            //     popup.textContent = textContent;
-            //     popup.style.left = `${event.pageX + 10}px`;
-            //     popup.style.top = `${event.pageY + 10}px`;
-            //     popup.style.display = 'block';
-            //     popup.style.color = 'black';
-            // } else
-            // {
-            //     popup.style.display = 'none';
-            // }
-        } else
+        }
+        else
         {
-            popup.style.display = 'none';
+            togglePopupVisibility();
         }
     }
-    else
-    {
-        popup.style.display = 'none';
-    }
+});
+
+popup.addEventListener('mouseenter', () =>
+{
+    popup.style.display = 'block';
+});
+popup.addEventListener('mouseleave', () =>
+{
+    togglePopupVisibility();
 });
 
 // function checkRightCtrlPressed(e)
@@ -156,27 +124,22 @@ document.addEventListener('mousemove', (event) =>
 
 function fetchVerse(verseKey)
 {
-    const footNoteRegex = /<[^>]+>[^<]+<[^>]+>/g;
-
     fetch(`https://api.quran.com/api/v4/quran/translations/20?verse_key=${verseKey}`)
         .then((response) => response.json())
         .then((data) =>
         {
             const translation = data.translations[0].text;
             const text = translation.replace(footNoteRegex, '');
-            console.log(text);
-
+            popupText = text;
         })
         .catch((error) => console.error('Error:', error));
 }
 
 function fetchVerses(test)
 {
-    const chapter = test.split(':')[0];
-    const verseStart = test.split('-')[0].split(':')[1];
-    const verseEnd = test.split('-')[1];
-
-    const footNoteRegex = /<[^>]+>[^<]+<[^>]+>/g;
+    const chapter = parseInt(test.split(':')[0]);
+    const verseStart = parseInt(test.split('-')[0].split(':')[1]);
+    const verseEnd = parseInt(test.split('-')[1]);
 
     fetch(`https://api.quran.com/api/v4/quran/translations/20?chapter_number=${chapter}`)
         .then((response) => response.json())
@@ -184,20 +147,37 @@ function fetchVerses(test)
         {
             const { translations } = data;
             const versesCount = verseEnd - verseStart + 1;
-            const joe = translations.splice(versesCount);
+
             const output = translations
-                .map((translation, index) => `${index + parseInt(verseStart)}. ${translation.text}`)
-                .join('<br>');
+                .slice(verseStart - 1, verseStart - 1 + versesCount)
+                .map((translation, index) => `<a href='https://quran.com/${chapter}?startingVerse=${verseStart + index}'>${verseStart + index}) ${translation.text}</a>`)
+                .join('<br>')
+                .replace(footNoteRegex, '');
+
             console.log(output);
-
             popupText = output;
-
-            // const translation = data.translations[0].text;
-            // const text = translation.replace(footNoteRegex, '');
-            // console.log(text);
-
         })
         .catch((error) => console.error('Error:', error));
+}
+
+function showPopup(text, x, y)
+{
+    popup.innerHTML = text;
+    popup.style.left = `${x + 10}px`;
+    popup.style.top = `${y + 10}px`;
+    popup.style.display = 'block';
+}
+
+function togglePopupVisibility()
+{
+    if (popup.style.display === 'block')
+    {
+        popup.style.display = 'none';
+    }
+    else
+    {
+        popup.style.display = 'block';
+    }
 }
 
 // const popup = document.createElement('div');
