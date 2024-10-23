@@ -1,4 +1,4 @@
-const quranReferenceRegex = /(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?/g;
+const quranReferenceRegex = /([1-9]\d{0,2}):([1-9]\d{0,2})(?:-([1-9]\d{0,2}))?/g;
 const footNoteRegex = /<(?!br|\ba href\b|\/)[^>]*>((?!>).)*<[^>]*>/g;
 
 const popup = document.createElement('div');
@@ -11,19 +11,18 @@ let popupText = null;
 
 document.addEventListener('keydown', (event) =>
 {
-    if (event.code === 'ControlRight')
+    if (event.code === 'ControlRight' && !isRightCtrlPressed)
     {
         isRightCtrlPressed = true;
     }
 });
 document.addEventListener('keyup', (event) =>
 {
-    if (event.code === 'ControlRight')
+    if (event.code === 'ControlRight' && isRightCtrlPressed)
     {
         isRightCtrlPressed = false;
     }
 });
-
 document.addEventListener('mousemove', (event) =>
 {
     if (isRightCtrlPressed)
@@ -31,40 +30,47 @@ document.addEventListener('mousemove', (event) =>
         const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
         if (hoveredElement)
         {
-            const { textContent } = hoveredElement;
-
-            // Check if the text contains a Qur'an reference
-            let matches = quranReferenceRegex.exec(textContent);
-            if (matches && matches.length > 0)
+            const { found, rect } = isHoveringOverText(hoveredElement, event.clientX, event.clientY);
+            if (found)
             {
-                const chapter = matches[1]
-                const verseStart = matches[2]
-                const verseEnd = matches[3]
+                const { textContent } = hoveredElement;
 
-                let _quranReference = verseEnd ? `${chapter}:${verseStart}-${verseEnd}` : `${chapter}:${verseStart}`;
-                if (_quranReference !== quranReference)
+                // Check if the text contains a Qur'an reference
+                let matches = quranReferenceRegex.exec(textContent);
+                if (matches && matches.length > 0)
                 {
-                    quranReference = _quranReference;
-
-                    (async () =>
+                    const chapter = matches[1]
+                    const verseStart = parseInt(matches[2])
+                    const verseEnd = parseInt(matches[3])
+                    if (verseEnd && verseEnd < verseStart)
                     {
-                        if (verseEnd)
-                        {
-                            popupText = await fetchVerses(quranReference);
-                        }
-                        else
-                        {
-                            popupText = await fetchVerse(quranReference);
-                        }
+                        return;
+                    }
 
-                        showPopup(popupText, event.clientX, event.clientY);
-                    })();
-                }
-                else
-                {
-                    showPopup(popupText, event.clientX, event.clientY);
-                }
+                    let _quranReference = verseEnd ? `${chapter}:${verseStart}-${verseEnd}` : `${chapter}:${verseStart}`;
+                    if (_quranReference !== quranReference)
+                    {
+                        quranReference = _quranReference;
 
+                        (async () =>
+                        {
+                            if (verseEnd)
+                            {
+                                popupText = await fetchVerses(quranReference);
+                            }
+                            else
+                            {
+                                popupText = await fetchVerse(quranReference);
+                            }
+
+                            displayPopup(popupText, rect.right, rect.bottom + window.scrollY);
+                        })();
+                    }
+                    else
+                    {
+                        displayPopup(popupText, rect.right, rect.bottom + window.scrollY);
+                    }
+                }
             }
         }
         else
@@ -81,14 +87,34 @@ document.addEventListener('mousedown', (event) =>
     }
 });
 
-popup.addEventListener('mouseenter', () =>
+popup.addEventListener('mouseenter', () => { showPopup() });
+popup.addEventListener('mouseleave', () => { togglePopupVisibility(); });
+
+function isHoveringOverText(element, x, y)
 {
-    popup.style.display = 'block';
-});
-popup.addEventListener('mouseleave', () =>
-{
-    togglePopupVisibility();
-});
+    const textNodes = Array.from(element.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+    for (const textNode of textNodes)
+    {
+        const range = document.createRange();
+        range.selectNodeContents(textNode);
+
+        // Loop through all rects that correspond to parts of the text
+        const rects = range.getClientRects();
+        for (const rect of rects)
+        {
+            // Check if the mouse is over the text node
+            if (
+                x >= rect.left && x <= rect.right &&
+                y >= rect.top && y <= rect.bottom
+            )
+            {
+                return { found: true, rect };
+            }
+        }
+    }
+
+    return { found: false };
+}
 
 async function fetchVerse(verseKey)
 {
@@ -104,7 +130,6 @@ async function fetchVerse(verseKey)
     }
     catch (error)
     {
-        console.error('Error:', error);
         return null;
     }
 }
@@ -135,12 +160,12 @@ async function fetchVerses(quranReference)
     }
 }
 
-function showPopup(text, x, y)
+function displayPopup(text, x, y)
 {
     popup.innerHTML = text;
-    popup.style.left = `${x + 10}px`;
-    popup.style.top = `${y + 10}px`;
     popup.style.display = 'block';
+    popup.style.left = `${x}px`;
+    popup.style.top = `${y}px`;
 }
 
 function togglePopupVisibility()
@@ -153,6 +178,11 @@ function togglePopupVisibility()
     {
         popup.style.display = 'block';
     }
+}
+
+function showPopup()
+{
+    popup.style.display = 'block';
 }
 
 function hidePopupOnClick(event)

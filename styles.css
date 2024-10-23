@@ -1,9 +1,10 @@
 .quran-popup
 {
-    background-color: #6926D7;
+    background-color: rgb(30, 30, 30);
+    border: 1px solid rgb(153, 153, 153);
+    box-shadow: rgba(255, 255, 255, 0.1) 0px 0px 1em;
     color: white;
     display: none;
-    font-weight: 500;
     line-height: 1.8;
     padding: 10px;
     position: absolute;
