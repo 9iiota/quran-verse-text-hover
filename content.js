@@ -1,4 +1,5 @@
 const quranReferenceRegex = /([1-9]\d{0,2}):([1-9]\d{0,2})(?:-([1-9]\d{0,2}))?/g;
+const testttttttt = /((\d{0,2}):([1-9]\d{0,2})(?:-([1-9]\d{0,2}))?)/g;
 const footNoteRegex = /<(?!br|\ba href\b|\/)[^>]*>((?!>).)*<[^>]*>/g;
 
 const popup = document.createElement('div');
@@ -23,6 +24,9 @@ document.addEventListener('keyup', (event) =>
         isRightCtrlPressed = false;
     }
 });
+let lastHighlightedSpan = null;
+let lastHighlightedCharacters = null;
+
 document.addEventListener('mousemove', (event) =>
 {
     if (isRightCtrlPressed)
@@ -33,52 +37,114 @@ document.addEventListener('mousemove', (event) =>
             const { found, rect } = isHoveringOverText(hoveredElement, event.clientX, event.clientY);
             if (found)
             {
-                const { textContent } = hoveredElement;
-
-                // Check if the text contains a Qur'an reference
-                let matches = quranReferenceRegex.exec(textContent);
-                if (matches && matches.length > 0)
+                const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+                if (range && range.startContainer.nodeType === Node.TEXT_NODE)
                 {
-                    const chapter = matches[1]
-                    const verseStart = parseInt(matches[2])
-                    const verseEnd = parseInt(matches[3])
-                    if (verseEnd && verseEnd < verseStart)
+                    const textNode = range.startContainer;
+
+                    // Use the helper function to get the full text
+                    const fullText = getFullTextFromHover(textNode);
+                    console.log(`Full Text: ${fullText}`);
+
+                    const offset = range.startOffset; // Current index of the letter
+                    const character = fullText[offset]; // Current character
+                    console.log(`Exact letter: ${character}`);
+
+                    const nextLetters = fullText.slice(offset + 1, offset + 7);
+                    console.log(`Next 6 letters: ${nextLetters}`);
+
+                    let joe = testttttttt.exec(nextLetters);
+                    if (joe)
                     {
-                        return;
+                        character += joe[0];
                     }
 
-                    let _quranReference = verseEnd ? `${chapter}:${verseStart}-${verseEnd}` : `${chapter}:${verseStart}`;
-                    if (_quranReference !== quranReference)
+                    if (character !== lastHighlightedCharacters)
                     {
-                        quranReference = _quranReference;
+                        lastHighlightedCharacters = character;
 
-                        (async () =>
+                        // Highlight the letter
+                        clearLastHighlight();
+                        highlightLetter(textNode, offset);
+                    }
+
+                    // Process Quran reference
+                    const matches = quranReferenceRegex.exec(fullText);
+                    if (matches)
+                    {
+                        const chapter = matches[1];
+                        const verseStart = parseInt(matches[2]);
+                        const verseEnd = parseInt(matches[3]);
+
+                        // Validate references
+                        if (
+                            chapter < 1 || chapter > 114 ||
+                            verseStart < 1 || verseStart > 286 ||
+                            (verseEnd && verseEnd < verseStart)
+                        )
                         {
-                            if (verseEnd)
-                            {
-                                popupText = await fetchVerses(quranReference);
-                            }
-                            else
-                            {
-                                popupText = await fetchVerse(quranReference);
-                            }
+                            return;
+                        }
 
+                        let _quranReference = verseEnd ? `${chapter}:${verseStart}-${verseEnd}` : `${chapter}:${verseStart}`;
+                        if (_quranReference !== quranReference)
+                        {
+                            quranReference = _quranReference;
+
+                            (async () =>
+                            {
+                                if (verseEnd)
+                                {
+                                    popupText = await fetchVerses(quranReference);
+                                } else
+                                {
+                                    popupText = await fetchVerse(quranReference);
+                                }
+
+                                displayPopup(popupText, rect.right, rect.bottom + window.scrollY);
+                            })();
+                        } else
+                        {
                             displayPopup(popupText, rect.right, rect.bottom + window.scrollY);
-                        })();
-                    }
-                    else
-                    {
-                        displayPopup(popupText, rect.right, rect.bottom + window.scrollY);
+                        }
                     }
                 }
+            } else
+            {
+                clearLastHighlight();
+                togglePopupVisibility();
             }
-        }
-        else
-        {
-            togglePopupVisibility();
         }
     }
 });
+
+// Highlight a specific letter in a text node
+function highlightLetter(textNode, offset)
+{
+    const span = document.createElement('span');
+    span.style.backgroundColor = 'yellow'; // Customize this color
+    span.textContent = textNode.nodeValue[offset];
+
+    const newTextNode = document.createTextNode(textNode.nodeValue.slice(offset + 1));
+    textNode.nodeValue = textNode.nodeValue.slice(0, offset);
+
+    // Insert the span and remaining text back into the DOM
+    textNode.parentNode.insertBefore(span, textNode.nextSibling);
+    textNode.parentNode.insertBefore(newTextNode, span.nextSibling);
+
+    lastHighlightedSpan = span; // Store for later removal
+}
+
+// Clear the last highlighted letter
+function clearLastHighlight()
+{
+    if (lastHighlightedSpan)
+    {
+        const parent = lastHighlightedSpan.parentNode;
+        parent.replaceChild(document.createTextNode(lastHighlightedSpan.textContent), lastHighlightedSpan);
+        lastHighlightedSpan = null;
+    }
+}
 document.addEventListener('mousedown', (event) =>
 {
     if (event.button === 0)
@@ -89,6 +155,16 @@ document.addEventListener('mousedown', (event) =>
 
 popup.addEventListener('mouseenter', () => { showPopup() });
 popup.addEventListener('mouseleave', () => { togglePopupVisibility(); });
+
+function clearLastHighlight()
+{
+    if (lastHighlightedSpan)
+    {
+        const parent = lastHighlightedSpan.parentNode;
+        parent.replaceChild(document.createTextNode(lastHighlightedSpan.textContent), lastHighlightedSpan);
+        lastHighlightedSpan = null;
+    }
+}
 
 function isHoveringOverText(element, x, y)
 {
@@ -114,6 +190,21 @@ function isHoveringOverText(element, x, y)
     }
 
     return { found: false };
+}
+
+function getFullTextFromHover(textNode)
+{
+    const parent = textNode.parentNode;
+    if (!parent)
+    {
+        return textNode.nodeValue;
+    } // Fallback to the current node
+
+    // Collect all text nodes within the parent
+    const textNodes = Array.from(parent.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+
+    // Combine their content
+    return textNodes.map(node => node.nodeValue).join('');
 }
 
 async function fetchVerse(verseKey)
@@ -149,7 +240,7 @@ async function fetchVerses(quranReference)
 
         return translations
             .slice(verseStart - 1, verseStart - 1 + versesCount)
-            .map((translation, index) => `<a href='https://quran.com/${chapter}?startingVerse=${verseStart + index}'>${verseStart + index})</a> ${translation.text}`)
+            .map((translation, index) => `<a href='https://quran.com/${chapter}?startingVerse=${verseStart + index}' target='_blank' rel='noopener noreferrer'>${verseStart + index})</a> ${translation.text}`)
             .join('<br>')
             .replace(footNoteRegex, '');
     }
@@ -297,3 +388,9 @@ function hidePopupOnClick(event)
 //         }
 //     }
 // }
+
+function OpenInNewTabWinBrowser(url)
+{
+    const win = window.open(url, '_blank');
+    win.focus();
+}
